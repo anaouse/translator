@@ -10,4 +10,5 @@ dependencies = [
     "pyperclip>=1.11.0",
     "pyqt6>=6.11.0",
     "pywebview>=6.2.1",
+    "requests>=2.33.1",
 ]

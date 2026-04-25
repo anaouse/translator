@@ -10,11 +10,15 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QTextEdit, QVBoxLayout, QWidget
 
+from floating_icon import FloatingIcon
+from translation import youdao_lookup_word
+
 # 引入我们刚才写的托盘类
 from tray import TranslatorTray
 
 kb = Controller()
 _window = None
+# 初始化浮动翻译图标
 
 
 class PopupWindow(QWidget):
@@ -80,10 +84,10 @@ def get_selected_text() -> str:
 
     with kb.pressed(keyboard.Key.ctrl):
         kb.press("c")
-        time.sleep(0.1)
+        time.sleep(0.05)
         kb.release("c")
 
-    time.sleep(0.1)
+    time.sleep(0.05)
     text = pyperclip.paste().strip()
 
     pyperclip.copy(original)
@@ -92,18 +96,25 @@ def get_selected_text() -> str:
 
 def on_trigger():
     print("triggered")
+    _floating_icon.hide()
     text = get_selected_text()
     print(f"text: {text}")
 
     if not text or _window is None:
         return
-
-    _window.update_text_signal.emit(text)
+    result = youdao_lookup_word(text)
+    _window.update_text_signal.emit(result)
 
 
 def on_mouse_click(x, y, button, pressed):
     if pressed and _window is not None:
         _window.check_click_signal.emit()
+
+    # 鼠标释放时，检测是否选中了文本，显示浮动图标
+    if not pressed:
+        text = get_selected_text()
+        if text:
+            _floating_icon.show_at(x, y)
 
 
 def start_listeners():
@@ -119,14 +130,17 @@ def start_listeners():
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    # 【关键修改 1】：确保即使所有窗口(Popup)被隐藏，程序也不会自动退出
-    # 这样程序才能真正在后台运行，必须通过托盘右键退出
+    # 确保即使所有窗口(Popup)被隐藏，程序也不会自动退出这样程序才能真正在后台运行，必须通过托盘右键退出
     app.setQuitOnLastWindowClosed(False)
 
     # 初始化弹出窗口
     _window = PopupWindow()
 
-    # 【关键修改 2】：初始化并显示系统托盘
+    # 初始化小图标
+    _floating_icon = FloatingIcon()
+    _floating_icon.clicked.connect(on_trigger)
+
+    # 初始化并显示系统托盘
     tray = TranslatorTray()
     tray.show()
 
