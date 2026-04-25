@@ -3,7 +3,7 @@ import sys
 
 if __name__ == "__main__":
     # 使用subprocess运行PyInstaller命令将项目打包为exe
-    cmd = ["pyinstaller", "--onefile", "--name", "translator", "main.py"]
+    cmd = ["pyinstaller", "--onefile", "--noconsole", "--name", "translator", "main.py"]
 
     print("正在打包为exe...")
     result = subprocess.run(cmd, capture_output=False, text=True)
