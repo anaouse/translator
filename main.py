@@ -10,7 +10,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QTextEdit, QVBoxLayout, QWidget
 
-from floating_icon import FloatingIcon
+# from floating_icon import FloatingIcon
 from translation import youdao_lookup_word
 
 # 引入我们刚才写的托盘类
@@ -18,7 +18,9 @@ from tray import TranslatorTray
 
 kb = Controller()
 _window = None
-# 初始化浮动翻译图标
+
+_last_trigger_time = 0.0
+DEBOUNCE_SECONDS = 0.5
 
 
 class PopupWindow(QWidget):
@@ -95,8 +97,11 @@ def get_selected_text() -> str:
 
 
 def on_trigger():
+    global _last_trigger_time
+    now = time.time()
+    if now - _last_trigger_time < DEBOUNCE_SECONDS:
+        return
     print("triggered")
-    _floating_icon.hide()
     text = get_selected_text()
     print(f"text: {text}")
 
@@ -111,10 +116,10 @@ def on_mouse_click(x, y, button, pressed):
         _window.check_click_signal.emit()
 
     # 鼠标释放时，检测是否选中了文本，显示浮动图标
-    if not pressed:
-        text = get_selected_text()
-        if text:
-            _floating_icon.show_at(x, y)
+    # if not pressed:
+    #     text = get_selected_text()
+    #     if text:
+    #         _floating_icon.show_at(x, y)
 
 
 def start_listeners():
@@ -137,8 +142,8 @@ if __name__ == "__main__":
     _window = PopupWindow()
 
     # 初始化小图标
-    _floating_icon = FloatingIcon()
-    _floating_icon.clicked.connect(on_trigger)
+    # _floating_icon = FloatingIcon()
+    # _floating_icon.clicked.connect(on_trigger)
 
     # 初始化并显示系统托盘
     tray = TranslatorTray()
