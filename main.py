@@ -1,6 +1,6 @@
 # main.py
-import ctypes
 import sys
+import threading
 import time
 
 import pyperclip
@@ -11,10 +11,8 @@ from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QTextEdit, QVBoxLayout, QWidget
 
 from detect_select_text import create_selection_listener
+from floating_window import FloatingWindow
 from translation import youdao_translation
-
-# from floating_icon import FloatingIcon
-# 引入我们刚才写的托盘类
 from tray import TranslatorTray
 
 kb = Controller()
@@ -37,23 +35,33 @@ class PopupWindow(QWidget):
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
         )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        # self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
         self.resize(420, 260)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        # layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         self.text_edit = QTextEdit(self)
         self.text_edit.setReadOnly(True)
+        self.setStyleSheet("""
+            QWidget {
+                background-color: rgba(250, 250, 250, 0.98);
+                border-radius: 14px;
+                border: 1px solid rgba(0, 0, 0, 0.08);
+            }
+        """)
         self.text_edit.setStyleSheet("""
             QTextEdit {
-                background-color: rgba(255, 255, 255, 1.0);
-                color: #222222;
-                border: 1px solid #cccccc;
-                border-radius: 10px;
-                padding: 15px;
+                background-color: transparent;
+                color: #1f1f1f;
+                border: none;
+                padding: 18px;
                 font-size: 15px;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                line-height: 1.5;
             }
         """)
         layout.addWidget(self.text_edit)
@@ -112,12 +120,24 @@ def on_trigger():
 
 
 def on_mouse_click(x, y, button, pressed):
-    if pressed and _window is not None:
+    if not pressed:
+        return
+
+    if _floating_window is not None:
+        _floating_window.check_click_signal.emit()
+
+    if _window is not None:
         _window.check_click_signal.emit()
 
 
 def on_select_text(action_type):
+    global _floating_window
     print(f"[{time.strftime('%H:%M:%S')}] 文本被选中了！触发方式: {action_type}")
+
+    # 只要实例存在就发送信号（去掉 isVisible 判断）
+    if _floating_window is not None:
+        print("floating 信号已发送")
+        _floating_window.show_signal.emit()
 
 
 def start_listeners():
@@ -144,8 +164,10 @@ if __name__ == "__main__":
     _window = PopupWindow()
 
     # 初始化小图标
-    # _floating_icon = FloatingIcon()
-
+    _floating_window = FloatingWindow()
+    _floating_window.clicked.connect(
+        lambda: threading.Thread(target=on_trigger, daemon=True).start()
+    )
     # 初始化并显示系统托盘
     tray = TranslatorTray()
     tray.show()
