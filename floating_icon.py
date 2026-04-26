@@ -9,8 +9,8 @@ class FloatingIcon(QWidget):
 
     clicked = pyqtSignal()
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self):
+        super().__init__()
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -18,36 +18,23 @@ class FloatingIcon(QWidget):
             | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(36, 36)
+        self.resize(28, 28)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.label = QLabel("🔤", self)
-        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label = QLabel(self)
+        self.label.setFixedSize(18, 18)
         self.label.setStyleSheet("""
             QLabel {
-                background-color: rgba(255, 255, 255, 0.95);
-                border: 1px solid #cccccc;
-                border-radius: 18px;
-                font-size: 18px;
+                background-color: white;
+                border: 3px solid black;
             }
         """)
-        self.label.setFixedSize(36, 36)
-        layout.addWidget(self.label)
-
-        self.hide()
-
-    def show_at(self, x: int, y: int):
-        """在指定坐标（右下角偏移）显示图标"""
-        self.move(x + 10, y + 10)
-        self.show()
-        self.raise_()
-        self.activateWindow()
+        self.label.setCursor(Qt.CursorShape.PointingHandCursor)
+        layout.addWidget(self.label, alignment=Qt.AlignmentFlag.AlignCenter)
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
-            self.hide()
         super().mousePressEvent(event)

@@ -1,6 +1,6 @@
 # main.py
+import ctypes
 import sys
-import threading
 import time
 
 import pyperclip
@@ -10,14 +10,16 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QTextEdit, QVBoxLayout, QWidget
 
-# from floating_icon import FloatingIcon
-from translation import youdao_lookup_word
+from detect_select_text import create_selection_listener
+from translation import youdao_translation
 
+# from floating_icon import FloatingIcon
 # 引入我们刚才写的托盘类
 from tray import TranslatorTray
 
 kb = Controller()
 _window = None
+_floating_window = None
 
 _last_trigger_time = 0.0
 DEBOUNCE_SECONDS = 0.5
@@ -76,8 +78,6 @@ class PopupWindow(QWidget):
 
 def get_selected_text() -> str:
     kb.release(keyboard.Key.alt)
-    kb.release(keyboard.Key.alt_l)
-    kb.release(keyboard.Key.alt_r)
     kb.release("a")
     time.sleep(0.05)
 
@@ -107,7 +107,7 @@ def on_trigger():
 
     if not text or _window is None:
         return
-    result = youdao_lookup_word(text)
+    result = youdao_translation(text)
     _window.update_text_signal.emit(result)
 
 
@@ -115,11 +115,9 @@ def on_mouse_click(x, y, button, pressed):
     if pressed and _window is not None:
         _window.check_click_signal.emit()
 
-    # 鼠标释放时，检测是否选中了文本，显示浮动图标
-    # if not pressed:
-    #     text = get_selected_text()
-    #     if text:
-    #         _floating_icon.show_at(x, y)
+
+def on_select_text(action_type):
+    print(f"[{time.strftime('%H:%M:%S')}] 文本被选中了！触发方式: {action_type}")
 
 
 def start_listeners():
@@ -130,6 +128,10 @@ def start_listeners():
     mouse_listener = mouse.Listener(on_click=on_mouse_click)
     mouse_listener.daemon = True
     mouse_listener.start()
+
+    select_text_listener = create_selection_listener(on_select_text)
+    select_text_listener.daemon = True
+    select_text_listener.start()
 
 
 if __name__ == "__main__":
@@ -143,7 +145,6 @@ if __name__ == "__main__":
 
     # 初始化小图标
     # _floating_icon = FloatingIcon()
-    # _floating_icon.clicked.connect(on_trigger)
 
     # 初始化并显示系统托盘
     tray = TranslatorTray()

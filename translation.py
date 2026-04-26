@@ -5,7 +5,7 @@ import requests
 youdao_session = requests.Session()
 
 
-def youdao_lookup_word(word: str) -> str:
+def youdao_translation(word: str) -> str:
     """查询单词释义（有道词典 suggest API）
 
     Args:
