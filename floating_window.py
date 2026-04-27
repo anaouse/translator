@@ -14,6 +14,7 @@ class FloatingWindow(QWidget):
     # 使用信号跨线程控制UI
     show_signal = pyqtSignal()
     check_click_signal = pyqtSignal()
+    hide_signal = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -46,46 +47,19 @@ class FloatingWindow(QWidget):
             }
         """)
         self.label.setCursor(Qt.CursorShape.PointingHandCursor)
-        # Enable mouse tracking on both the window and the label
-        self.setMouseTracking(True)
-        self.label.setMouseTracking(True)
-        self.label.installEventFilter(self)
-        self._set_label_normal()
 
         layout.addWidget(self.label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # 绑定信号到对应的槽函数
         self.show_signal.connect(self._do_show_near_cursor)
         self.check_click_signal.connect(self._handle_global_click)
+        self.hide_signal.connect(self._do_hide)
 
         # 记录上一次显示的时间
         self._show_time = 0.0
 
-    def eventFilter(self, obj, event):
-        if obj is self.label:
-            if event.type() == event.Type.Enter:
-                self._set_label_hovered()
-            elif event.type() == event.Type.Leave:
-                self._set_label_normal()
-        return super().eventFilter(obj, event)
-
-    def _set_label_normal(self):
-        self.label.setStyleSheet("""
-            QLabel {
-                background-color: rgba(255, 255, 255, 0.95);
-                border: 1px solid rgba(0, 0, 0, 0.15);
-                border-radius: 9px;
-            }
-        """)
-
-    def _set_label_hovered(self):
-        self.label.setStyleSheet("""
-            QLabel {
-                background-color: rgba(240, 240, 240, 1);
-                border: 1px solid rgba(0, 120, 215, 0.8);
-                border-radius: 9px;
-            }
-        """)
+    def _do_hide(self):
+        self.hide()
 
     def _do_show_near_cursor(self):
         """主线程中执行的显示逻辑"""

@@ -1,7 +1,6 @@
 import requests
 
-# 1. 在函数外部创建一个全局 Session
-# 这样后续的所有请求都会复用同一个底层 TCP 连接
+# 复用同一个底层 TCP ？
 youdao_session = requests.Session()
 
 

@@ -36,12 +36,9 @@ class PopupWindow(QWidget):
             | Qt.WindowType.Tool
         )
 
-        # self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
         self.resize(420, 260)
 
         layout = QVBoxLayout(self)
-        # layout.setContentsMargins(10, 10, 10, 10)
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.text_edit = QTextEdit(self)
@@ -109,6 +106,8 @@ def on_trigger():
     now = time.time()
     if now - _last_trigger_time < DEBOUNCE_SECONDS:
         return
+    if _floating_window is not None:
+        _floating_window.hide_signal.emit()
     print("triggered")
     text = get_selected_text()
     print(f"text: {text}")
@@ -134,14 +133,25 @@ def on_select_text(action_type):
     global _floating_window
     print(f"[{time.strftime('%H:%M:%S')}] 文本被选中了！触发方式: {action_type}")
 
-    # 只要实例存在就发送信号（去掉 isVisible 判断）
+    # 只要实例存在就发送信号
     if _floating_window is not None:
         print("floating 信号已发送")
         _floating_window.show_signal.emit()
 
 
+def on_alt_tab():
+    """按下 Alt+Tab 时隐藏悬浮窗"""
+    if _floating_window is not None:
+        _floating_window.hide_signal.emit()
+
+
 def start_listeners():
-    kb_listener = GlobalHotKeys({"<alt>+a": on_trigger})
+    kb_listener = GlobalHotKeys(
+        {
+            "<alt>+a": on_trigger,
+            "<alt>+<tab>": on_alt_tab,
+        }
+    )
     kb_listener.daemon = True
     kb_listener.start()
 
@@ -168,7 +178,8 @@ if __name__ == "__main__":
     _floating_window.clicked.connect(
         lambda: threading.Thread(target=on_trigger, daemon=True).start()
     )
-    # 初始化并显示系统托盘
+
+    # 初始化系统托盘
     tray = TranslatorTray()
     tray.show()
 
