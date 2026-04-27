@@ -10,6 +10,8 @@
 
 双击或鼠标拖动选中英文单词后使用 `alt+a` 或点击悬浮小球即可翻译
 
+![示例 GIF](./docs/example.gif)
+
 # Credit
 
 翻译依赖于网易有道翻译：https://dict.youdao.com/
