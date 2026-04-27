@@ -1,3 +1,5 @@
+import time
+
 import requests
 
 # 复用同一个底层 TCP ？
@@ -14,6 +16,8 @@ def youdao_translation(word: str) -> str:
         格式化后的 "entry: explain" 字符串，每行一条结果；
         如果出错则返回以 "error:" 或 "network error:" 开头的错误信息。
     """
+    start = time.time()
+
     url = "https://dict.youdao.com/suggest"
     params = {
         "num": 2,
@@ -45,4 +49,7 @@ def youdao_translation(word: str) -> str:
         return "no results"
 
     lines = [f"{item['entry']}: {item['explain']}" for item in entries]
+
+    print(f"[耗时] {time.time() - start:.3f}s")
+
     return "\n".join(lines)

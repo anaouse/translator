@@ -68,11 +68,13 @@ class PopupWindow(QWidget):
 
     def _display_and_show(self, text):
         self.text_edit.setPlainText(text)
-        cursor = QCursor.pos()
-        self.move(cursor.x() + 15, cursor.y() + 15)
-        self.show()
-        self.raise_()
-        self.activateWindow()
+        if not self.isVisible():
+            # 只在首次显示时定位到鼠标位置
+            cursor = QCursor.pos()
+            self.move(cursor.x() + 15, cursor.y() + 15)
+            self.show()
+            self.raise_()
+            self.activateWindow()
 
     def _handle_global_click(self):
         if self.isVisible():

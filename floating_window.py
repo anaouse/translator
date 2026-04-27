@@ -24,7 +24,6 @@ class FloatingWindow(QWidget):
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
         )
-        # | Qt.WindowType.WindowDoesNotAcceptFocus
         # 显示时不抢占焦点
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
