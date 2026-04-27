@@ -1,6 +1,7 @@
 # tray.py
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPixmap
+from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 
 class TranslatorTray(QSystemTrayIcon):
@@ -8,15 +9,31 @@ class TranslatorTray(QSystemTrayIcon):
         super().__init__(parent)
 
         # 设置托盘图标
-        # 这里默认使用 PyQt 自带的电脑图标作为占位符。
-        # 建议后续替换为你自己的图标，例如: self.setIcon(QIcon("icon.png"))
-        standard_icon = QApplication.style().standardIcon(
-            QStyle.StandardPixmap.SP_ComputerIcon
-        )
-        self.setIcon(standard_icon)
+        size = 64  # 画布大小，托盘会自动缩放到合适尺寸
+
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        gradient = QLinearGradient(0, 0, 0, size)
+        gradient.setColorAt(0.0, QColor("#5E81AC"))
+        gradient.setColorAt(1.0, QColor("#88C0D0"))
+
+        painter.setBrush(QBrush(gradient))
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        # 画圆角正方形，圆角半径设为 8px
+        rect = pixmap.rect().adjusted(2, 2, -2, -2)
+        painter.drawRoundedRect(rect, 8, 8)
+
+        painter.end()
+
+        self.setIcon(QIcon(pixmap))
 
         # 设置鼠标悬停时的提示文字
-        self.setToolTip("AI Translator (Alt+A 唤醒)")
+        self.setToolTip("Translator (选中文本后 Alt+A 或点击悬浮窗翻译)")
 
         # 创建右键菜单
         self.menu = QMenu()
@@ -30,6 +47,4 @@ class TranslatorTray(QSystemTrayIcon):
 
     def exit_app(self):
         # 正常退出 PyQt 应用
-        # 因为 main.py 中的 pynput 监听器设置了 daemon=True，
-        # 主线程退出后，监听器也会自动随之销毁，实现干净利落的退出。
         QApplication.quit()
