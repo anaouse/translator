@@ -1,9 +1,9 @@
 # floating_window.py
 import time
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor, QMouseEvent
-from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
 
 class FloatingWindow(QWidget):
@@ -23,8 +23,8 @@ class FloatingWindow(QWidget):
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
-            | Qt.WindowType.WindowDoesNotAcceptFocus
         )
+        # | Qt.WindowType.WindowDoesNotAcceptFocus
         # 显示时不抢占焦点
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
@@ -80,7 +80,17 @@ class FloatingWindow(QWidget):
             if not self.frameGeometry().contains(pos):
                 self.hide()
 
-    def mousePressEvent(self, event: QMouseEvent):
+    def mouseReleaseEvent(self, event: QMouseEvent):
         # 点击自己会触发事件并隐藏，先隐藏再发送信号
-        self.hide()
+        # 1. 先调用父类方法，让 Qt 走完内部的点击事件流程
+        super().mousePressEvent(event)
+        # 3. 【核心修复】强制清除 Label 和 悬浮窗的 "鼠标悬停" 状态
+        # 这样下次显示时，hover 效果才能正常重新触发
+        self.label.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
+
+        # 2. 发送触发翻译的信号
         self.clicked.emit()
+
+        # 4. 最后再隐藏窗口
+        self.hide()

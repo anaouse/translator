@@ -95,6 +95,7 @@ def get_selected_text() -> str:
         kb.release("c")
 
     time.sleep(0.05)
+
     text = pyperclip.paste().strip()
 
     pyperclip.copy(original)
@@ -108,12 +109,16 @@ def on_trigger():
         return
     if _floating_window is not None:
         _floating_window.hide_signal.emit()
+
     print("triggered")
     text = get_selected_text()
     print(f"text: {text}")
 
     if not text or _window is None:
         return
+    # 先显示"正在翻译..."
+    if _window is not None:
+        _window.update_text_signal.emit("正在翻译...")
     result = youdao_translation(text)
     _window.update_text_signal.emit(result)
 
