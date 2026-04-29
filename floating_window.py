@@ -1,9 +1,9 @@
 # floating_window.py
 import time
 
-from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor, QMouseEvent
-from PyQt6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 
 class FloatingWindow(QWidget):

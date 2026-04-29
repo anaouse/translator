@@ -2,7 +2,7 @@ import time
 
 import requests
 
-# 复用同一个底层 TCP ？
+# 复用同一个底层 TCP
 youdao_session = requests.Session()
 
 

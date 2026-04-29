@@ -12,12 +12,14 @@ from PyQt6.QtWidgets import QApplication, QTextEdit, QVBoxLayout, QWidget
 
 from detect_select_text import create_selection_listener
 from floating_window import FloatingWindow
+from input_window import InputWindow
 from translation import youdao_translation
 from tray import TranslatorTray
 
 kb = Controller()
 _window = None
 _floating_window = None
+_input_window = None
 
 _last_trigger_time = 0.0
 DEBOUNCE_SECONDS = 0.5
@@ -117,10 +119,20 @@ def on_trigger():
     print(f"text: {text}")
 
     if not text or _window is None:
+        if _input_window:
+            _input_window.show_and_clear_signal.emit()
         return
     # 先显示"正在翻译..."
     if _window is not None:
         _window.update_text_signal.emit("正在翻译...")
+    result = youdao_translation(text)
+    _window.update_text_signal.emit(result)
+
+
+def on_input_submit(text: str):
+    if not text or _window is None:
+        return
+    _window.update_text_signal.emit("正在翻译...")
     result = youdao_translation(text)
     _window.update_text_signal.emit(result)
 
@@ -134,6 +146,9 @@ def on_mouse_click(x, y, button, pressed):
 
     if _window is not None:
         _window.check_click_signal.emit()
+
+    if _input_window is not None:
+        _input_window.check_click_signal.emit()
 
 
 def on_select_text(action_type):
@@ -184,6 +199,14 @@ if __name__ == "__main__":
     _floating_window = FloatingWindow()
     _floating_window.clicked.connect(
         lambda: threading.Thread(target=on_trigger, daemon=True).start()
+    )
+
+    # 初始化输入窗
+    _input_window = InputWindow()
+    _input_window.submit_signal.connect(
+        lambda text: threading.Thread(
+            target=on_input_submit, args=(text,), daemon=True
+        ).start()
     )
 
     # 初始化系统托盘
