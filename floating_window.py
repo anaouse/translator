@@ -5,6 +5,8 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor, QMouseEvent
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+from global_variant import g_previous_hwnd
+
 
 class FloatingWindow(QWidget):
     """鼠标选中文本后，在文本右下角出现的翻译小图标"""

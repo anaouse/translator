@@ -1,14 +1,17 @@
 # input_window.py
+import ctypes
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QLineEdit, QVBoxLayout, QWidget
+
+from global_variant import g_previous_hwnd, restore_previous_window
 
 
 class InputWindow(QWidget):
     """alt + a 如果没有文本的话跳出的输入框翻译"""
 
-    show_and_clear_signal = pyqtSignal()
+    show_signal = pyqtSignal()
     check_click_signal = pyqtSignal()
     hide_signal = pyqtSignal()
     submit_signal = pyqtSignal(str)
@@ -50,10 +53,20 @@ class InputWindow(QWidget):
 
         layout.addWidget(self.input_edit)
 
+        self.input_edit.installEventFilter(self)
+
         # 绑定信号到对应的槽函数
-        self.show_and_clear_signal.connect(self._show_and_clear)
+        self.show_signal.connect(self._show_and_clear)
         self.check_click_signal.connect(self._check_click)
         self.hide_signal.connect(self._do_hide)
+
+    def eventFilter(self, obj, event):
+        if obj == self.input_edit and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Escape:
+                self.hide()
+                restore_previous_window()
+                return True
+        return super().eventFilter(obj, event)
 
     def _on_submit(self):
         text = self.input_edit.text().strip()
@@ -65,6 +78,10 @@ class InputWindow(QWidget):
         self.hide()
 
     def _show_and_clear(self):
+        global g_previous_hwnd
+        current_hwnd = ctypes.windll.user32.GetForegroundWindow()
+        if current_hwnd != int(self.winId()):
+            g_previous_hwnd = ctypes.windll.user32.GetForegroundWindow()
         self.input_edit.clear()
         cursor = QCursor.pos()
         self.move(cursor.x() + 15, cursor.y())

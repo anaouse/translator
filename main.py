@@ -1,4 +1,5 @@
 # main.py
+import ctypes
 import sys
 import threading
 import time
@@ -6,12 +7,13 @@ import time
 import pyperclip
 from pynput import keyboard, mouse
 from pynput.keyboard import Controller, GlobalHotKeys
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QTextEdit, QVBoxLayout, QWidget
 
 from detect_select_text import create_selection_listener
 from floating_window import FloatingWindow
+from global_variant import g_previous_hwnd, restore_previous_window
 from input_window import InputWindow
 from translation import youdao_translation
 from tray import TranslatorTray
@@ -64,11 +66,29 @@ class PopupWindow(QWidget):
             }
         """)
         layout.addWidget(self.text_edit)
+        # 加入 eventfilter 控制 esc 行为：
+        self.text_edit.installEventFilter(self)
 
         self.update_text_signal.connect(self._display_and_show)
         self.check_click_signal.connect(self._handle_global_click)
 
+    # PopupWindow 类内
+    def eventFilter(self, obj, event):
+        if obj == self.text_edit and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Escape:
+                self.hide()
+                restore_previous_window()
+                return True
+        return super().eventFilter(obj, event)
+
     def _display_and_show(self, text):
+        global g_previous_hwnd
+        # 存储当前焦点窗口句柄，但是从 InputWindow 来的话其实不用存储吧，加入一个变量？
+        # 解决方法是确保目前聚焦的不是本窗口（实在不行加一个变量控制是否要改变 g_previous_hwnd 值）
+        current_hwnd = ctypes.windll.user32.GetForegroundWindow()
+        if current_hwnd != int(self.winId()):
+            g_previous_hwnd = current_hwnd
+
         self.text_edit.setPlainText(text)
         if not self.isVisible():
             # 只在首次显示时定位到鼠标位置
@@ -86,9 +106,10 @@ class PopupWindow(QWidget):
 
 
 def get_selected_text() -> str:
-    kb.release(keyboard.Key.alt)
-    kb.release("a")
-    time.sleep(0.05)
+    # 有时候会单单点击 a 就翻译，估计是这里的问题，因为不是用真正的系统级别热键
+    # kb.release(keyboard.Key.alt)
+    # kb.release("a")
+    time.sleep(0.1)
 
     original = pyperclip.paste()
     pyperclip.copy("")
@@ -120,7 +141,7 @@ def on_trigger():
 
     if not text or _window is None:
         if _input_window:
-            _input_window.show_and_clear_signal.emit()
+            _input_window.show_signal.emit()
         return
     # 先显示"正在翻译..."
     if _window is not None:
