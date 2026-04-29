@@ -40,7 +40,7 @@ class PopupWindow(QWidget):
             | Qt.WindowType.Tool
         )
 
-        self.resize(420, 260)
+        self.resize(420, 220)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
