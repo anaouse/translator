@@ -158,6 +158,11 @@ def on_input_submit(text: str):
     _window.update_text_signal.emit(result)
 
 
+def on_show_input_window():
+    if _input_window:
+        _input_window.show_signal.emit()
+
+
 def on_mouse_click(x, y, button, pressed):
     if not pressed:
         return
@@ -191,6 +196,7 @@ def on_alt_tab():
 def start_listeners():
     kb_listener = GlobalHotKeys(
         {
+            "<alt>+q": on_show_input_window,
             "<alt>+a": on_trigger,
             "<alt>+<tab>": on_alt_tab,
         }

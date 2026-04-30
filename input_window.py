@@ -3,7 +3,7 @@ import ctypes
 
 from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
-from PyQt6.QtWidgets import QLineEdit, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QLineEdit, QVBoxLayout, QWidget
 
 from global_variant import g_previous_hwnd, restore_previous_window
 
@@ -83,8 +83,8 @@ class InputWindow(QWidget):
         if current_hwnd != int(self.winId()):
             g_previous_hwnd = ctypes.windll.user32.GetForegroundWindow()
         self.input_edit.clear()
-        cursor = QCursor.pos()
-        self.move(cursor.x() + 15, cursor.y())
+        center = QApplication.primaryScreen().availableGeometry().center()
+        self.move(center.x() - self.width() // 2, center.y() - self.height() // 2)
         self.show()
         self.raise_()
         self.activateWindow()
