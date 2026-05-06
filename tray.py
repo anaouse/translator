@@ -1,10 +1,12 @@
 # tray.py
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 
 class TranslatorTray(QSystemTrayIcon):
+    left_clicked = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -44,6 +46,13 @@ class TranslatorTray(QSystemTrayIcon):
 
         # 将菜单设置给托盘
         self.setContextMenu(self.menu)
+
+        # 左键单击托盘图标时发送信号
+        self.activated.connect(self._on_activated)
+
+    def _on_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self.left_clicked.emit()
 
     def exit_app(self):
         # 正常退出 PyQt 应用

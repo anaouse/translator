@@ -13,6 +13,7 @@ from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QTextEdit, QVBoxLayout, QWidget
 
 from detect_select_text import create_selection_listener
+from flash_card_window import FlashCardWindow
 from floating_window import FloatingWindow
 from global_variant import g_previous_hwnd, restore_previous_window
 from input_window import InputWindow
@@ -24,6 +25,7 @@ kb = Controller()
 _window = None
 _floating_window = None
 _input_window = None
+_flash_card_window = None
 
 _last_trigger_time = 0.0
 DEBOUNCE_SECONDS = 0.5
@@ -257,8 +259,12 @@ if __name__ == "__main__":
         ).start()
     )
 
+    # 初始化闪卡窗口（左键托盘弹出）
+    _flash_card_window = FlashCardWindow()
+
     # 初始化系统托盘
     tray = TranslatorTray()
+    tray.left_clicked.connect(_flash_card_window.show_signal.emit)
     tray.show()
 
     # 启动快捷键和鼠标监听（它们是 daemon 线程，随主程序退出而停止）
