@@ -1,5 +1,6 @@
 # main.py
 import ctypes
+import re
 import sys
 import threading
 import time
@@ -17,6 +18,7 @@ from global_variant import g_previous_hwnd, restore_previous_window
 from input_window import InputWindow
 from translation import youdao_translation
 from tray import TranslatorTray
+from word_store import add_word, flush
 
 kb = Controller()
 _window = None
@@ -127,6 +129,17 @@ def get_selected_text() -> str:
     return text
 
 
+def _is_english(text: str) -> bool:
+    # 允许：英文字母、数字、空格、常用标点
+    # ^[ -~]+$ 匹配 ASCII 32 到 126 的所有可打印字符
+    return bool(re.match(r'^[a-zA-Z0-9\s\.,!?"\'-]+$', text))
+
+
+def _is_successful_result(result: str) -> bool:
+    """Return True if the translation result is a real result (not an error)."""
+    return not result.startswith("error:")
+
+
 def on_trigger():
     global _last_trigger_time
     now = time.time()
@@ -149,6 +162,10 @@ def on_trigger():
     result = youdao_translation(text)
     _window.update_text_signal.emit(result)
 
+    # Store English word lookups
+    if _is_english(text) and _is_successful_result(result):
+        add_word(text, result)
+
 
 def on_input_submit(text: str):
     if not text or _window is None:
@@ -156,6 +173,10 @@ def on_input_submit(text: str):
     _window.update_text_signal.emit("正在翻译...")
     result = youdao_translation(text)
     _window.update_text_signal.emit(result)
+
+    # Store English word lookups
+    if _is_english(text) and _is_successful_result(result):
+        add_word(text, result)
 
 
 def on_show_input_window():
@@ -242,5 +263,8 @@ if __name__ == "__main__":
 
     # 启动快捷键和鼠标监听（它们是 daemon 线程，随主程序退出而停止）
     start_listeners()
+
+    # Flush remaining word store entries when the app quits
+    app.aboutToQuit.connect(flush)
 
     sys.exit(app.exec())

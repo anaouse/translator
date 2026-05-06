@@ -11,3 +11,4 @@ wheels/
 fanyi_demo/
 dev/
 *.drawio
+*.json
