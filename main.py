@@ -210,8 +210,8 @@ def on_select_text(action_type):
         _floating_window.show_signal.emit()
 
 
-def on_alt_tab():
-    """按下 Alt+Tab 时隐藏悬浮窗"""
+def on_any_key(key):
+    """按下任意键时隐藏悬浮窗"""
     if _floating_window is not None:
         _floating_window.hide_signal.emit()
 
@@ -221,11 +221,15 @@ def start_listeners():
         {
             "<alt>+q": on_show_input_window,
             "<alt>+a": on_trigger,
-            "<alt>+<tab>": on_alt_tab,
         }
     )
     kb_listener.daemon = True
     kb_listener.start()
+
+    # 单独的监听器：任意键按下时隐藏悬浮窗
+    any_key_listener = keyboard.Listener(on_press=on_any_key)
+    any_key_listener.daemon = True
+    any_key_listener.start()
 
     mouse_listener = mouse.Listener(on_click=on_mouse_click)
     mouse_listener.daemon = True
