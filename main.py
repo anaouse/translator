@@ -4,13 +4,14 @@ import re
 import sys
 import threading
 import time
+import pyttsx3
 
 import pyperclip
 from pynput import keyboard, mouse
 from pynput.keyboard import Controller, GlobalHotKeys
 from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
-from PyQt6.QtWidgets import QApplication, QTextEdit, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QHBoxLayout, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
 from detect_select_text import create_selection_listener
 from flash_card_window import FlashCardWindow
@@ -32,11 +33,12 @@ DEBOUNCE_SECONDS = 0.5
 
 
 class PopupWindow(QWidget):
-    update_text_signal = pyqtSignal(str)
+    update_text_signal = pyqtSignal(str, str)  # original_text, translated_text
     check_click_signal = pyqtSignal()
 
     def __init__(self):
         super().__init__()
+        self.setObjectName("popupWindow")
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -45,19 +47,60 @@ class PopupWindow(QWidget):
         )
 
         self.resize(420, 220)
+        self._original_text = ""
+        self._speaking = False
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        self.text_edit = QTextEdit(self)
-        self.text_edit.setReadOnly(True)
+        # ---- 整体窗口样式（仅作用于 PopupWindow 自身） ----
         self.setStyleSheet("""
-            QWidget {
+            QWidget#popupWindow {
                 background-color: rgba(250, 250, 250, 0.98);
                 border-radius: 14px;
                 border: 1px solid rgba(0, 0, 0, 0.08);
             }
         """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # ---- Header ----
+        header = QWidget()
+        header.setStyleSheet("""
+            QWidget {
+                background: transparent;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            }
+        """)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(12, 8, 12, 8)
+
+        self.pronounce_btn = QPushButton("🔊")
+        self.pronounce_btn.setFixedSize(32, 32)
+        self.pronounce_btn.setToolTip("发音")
+        self.pronounce_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(0, 0, 0, 0.04);
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+            }
+            QPushButton:hover {
+                background: rgba(0, 0, 0, 0.08);
+            }
+            QPushButton:pressed {
+                background: rgba(0, 0, 0, 0.12);
+            }
+        """)
+        self.pronounce_btn.clicked.connect(self._pronounce)
+        self.pronounce_btn.hide()  # 默认隐藏，有英文原文时才显示
+        header_layout.addWidget(self.pronounce_btn)
+        header_layout.addStretch()
+
+        layout.addWidget(header)
+
+        # ---- 翻译结果显示 ----
+        self.text_edit = QTextEdit(self)
+        self.text_edit.setReadOnly(True)
         self.text_edit.setStyleSheet("""
             QTextEdit {
                 background-color: transparent;
@@ -70,6 +113,7 @@ class PopupWindow(QWidget):
             }
         """)
         layout.addWidget(self.text_edit)
+
         # 加入 eventfilter 控制 esc 行为：
         self.text_edit.installEventFilter(self)
 
@@ -85,15 +129,22 @@ class PopupWindow(QWidget):
                 return True
         return super().eventFilter(obj, event)
 
-    def _display_and_show(self, text):
+    def _display_and_show(self, original_text, translated_text):
         global g_previous_hwnd
-        # 存储当前焦点窗口句柄，但是从 InputWindow 来的话其实不用存储吧，加入一个变量？
-        # 解决方法是确保目前聚焦的不是本窗口（实在不行加一个变量控制是否要改变 g_previous_hwnd 值）
+        self._original_text = original_text
+
         current_hwnd = ctypes.windll.user32.GetForegroundWindow()
         if current_hwnd != int(self.winId()):
             g_previous_hwnd = current_hwnd
 
-        self.text_edit.setPlainText(text)
+        self.text_edit.setPlainText(translated_text)
+
+        # 只有原文是英文时才显示发音按钮
+        if original_text and _is_english(original_text):
+            self.pronounce_btn.show()
+        else:
+            self.pronounce_btn.hide()
+
         if not self.isVisible():
             # 只在首次显示时定位到鼠标位置
             cursor = QCursor.pos()
@@ -107,6 +158,22 @@ class PopupWindow(QWidget):
             pos = QCursor.pos()
             if not self.frameGeometry().contains(pos):
                 self.hide()
+
+    def _pronounce(self):
+        """在子线程中发音，避免阻塞 UI；正在发音时忽略重复点击"""
+        if self._original_text and not self._speaking:
+            self._speaking = True
+            threading.Thread(
+                target=self._speak, args=(self._original_text,), daemon=True
+            ).start()
+
+    def _speak(self, text: str):
+        try:
+            engine = pyttsx3.init()
+            engine.say(text)
+            engine.runAndWait()
+        finally:
+            self._speaking = False
 
 
 def get_selected_text() -> str:
@@ -160,9 +227,9 @@ def on_trigger():
         return
     # 先显示"正在翻译..."
     if _window is not None:
-        _window.update_text_signal.emit("正在翻译...")
+        _window.update_text_signal.emit(text, "正在翻译...")
     result = youdao_translation(text)
-    _window.update_text_signal.emit(result)
+    _window.update_text_signal.emit(text, result)
 
     # Store English word lookups
     if _is_english(text) and _is_successful_result(result):
@@ -172,9 +239,9 @@ def on_trigger():
 def on_input_submit(text: str):
     if not text or _window is None:
         return
-    _window.update_text_signal.emit("正在翻译...")
+    _window.update_text_signal.emit(text, "正在翻译...")
     result = youdao_translation(text)
-    _window.update_text_signal.emit(result)
+    _window.update_text_signal.emit(text, result)
 
     # Store English word lookups
     if _is_english(text) and _is_successful_result(result):
