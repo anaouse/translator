@@ -129,6 +129,14 @@ class PopupWindow(QWidget):
                 return True
         return super().eventFilter(obj, event)
 
+    def keyPressEvent(self, event):
+        # 兜底：无论焦点在弹窗内哪个控件上，ESC 都能隐藏弹窗
+        if event.key() == Qt.Key.Key_Escape:
+            self.hide()
+            restore_previous_window()
+            return
+        super().keyPressEvent(event)
+
     def _display_and_show(self, original_text, translated_text):
         global g_previous_hwnd
         self._original_text = original_text
@@ -147,11 +155,39 @@ class PopupWindow(QWidget):
 
         if not self.isVisible():
             # 只在首次显示时定位到鼠标位置
-            cursor = QCursor.pos()
-            self.move(cursor.x() + 15, cursor.y() + 15)
+            self._move_near_cursor()
             self.show()
             self.raise_()
             self.activateWindow()
+            # 把键盘焦点给到文本区，否则按键事件到不了 text_edit，ESC 无法生效
+            self.text_edit.setFocus()
+
+    def _move_near_cursor(self):
+        """把弹窗放到鼠标右下方；超出屏幕时翻转到鼠标左/上方，再夹取到屏幕可用区域内"""
+        cursor = QCursor.pos()
+        screen = QApplication.screenAt(cursor)
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        area = screen.availableGeometry()
+
+        offset = 15
+        w, h = self.width(), self.height()
+
+        # 默认放到鼠标右下方
+        x = cursor.x() + offset
+        y = cursor.y() + offset
+
+        # 右/下放不下就翻转到左/上方
+        if x + w > area.right():
+            x = cursor.x() - w - offset
+        if y + h > area.bottom():
+            y = cursor.y() - h - offset
+
+        # 兜底：夹取到可用屏幕范围内，保证完全可见
+        x = max(area.left(), min(x, area.right() - w))
+        y = max(area.top(), min(y, area.bottom() - h))
+
+        self.move(x, y)
 
     def _handle_global_click(self):
         if self.isVisible():
