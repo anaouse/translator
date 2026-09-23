@@ -6,9 +6,13 @@ from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 class TranslatorTray(QSystemTrayIcon):
     left_clicked = pyqtSignal()
+    auto_speak_toggled = pyqtSignal(bool)  # True 表示开启自动发音
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        # 默认开启自动发音
+        self.auto_speak_enabled = True
 
         # 设置托盘图标
         size = 64  # 画布大小，托盘会自动缩放到合适尺寸
@@ -40,6 +44,11 @@ class TranslatorTray(QSystemTrayIcon):
         # 创建右键菜单
         self.menu = QMenu()
 
+        # 添加自动发音开关
+        self.auto_speak_action = self.menu.addAction("")
+        self._update_auto_speak_action()
+        self.auto_speak_action.triggered.connect(self._toggle_auto_speak)
+
         # 添加退出操作
         self.exit_action = self.menu.addAction("退出 (Exit)")
         self.exit_action.triggered.connect(self.exit_app)
@@ -53,6 +62,17 @@ class TranslatorTray(QSystemTrayIcon):
     def _on_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.left_clicked.emit()
+
+    def _update_auto_speak_action(self):
+        # 勾选状态直接体现在菜单文字上
+        self.auto_speak_action.setText(
+            "自动发音 ☑️" if self.auto_speak_enabled else "自动发音"
+        )
+
+    def _toggle_auto_speak(self):
+        self.auto_speak_enabled = not self.auto_speak_enabled
+        self._update_auto_speak_action()
+        self.auto_speak_toggled.emit(self.auto_speak_enabled)
 
     def exit_app(self):
         # 正常退出 PyQt 应用

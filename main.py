@@ -31,6 +31,8 @@ _flash_card_window = None
 _last_trigger_time = 0.0
 DEBOUNCE_SECONDS = 0.5
 
+_auto_speak = True  # 翻译英文后是否自动发音（托盘菜单可切换）
+
 
 class PopupWindow(QWidget):
     update_text_signal = pyqtSignal(str, str)  # original_text, translated_text
@@ -211,6 +213,11 @@ class PopupWindow(QWidget):
         finally:
             self._speaking = False
 
+    def auto_speak(self, text: str):
+        """翻译完成后自动发音，复用 _pronounce 的发音逻辑"""
+        self._original_text = text
+        self._pronounce()
+
 
 def get_selected_text() -> str:
     # 有时候会单单点击 a 就翻译，估计是这里的问题，因为不是用真正的系统级别热键
@@ -270,6 +277,8 @@ def on_trigger():
     # Store English word lookups
     if _is_english(text) and _is_successful_result(result):
         add_word(text, result)
+        if _auto_speak:
+            _window.auto_speak(text)
 
 
 def on_input_submit(text: str):
@@ -282,6 +291,13 @@ def on_input_submit(text: str):
     # Store English word lookups
     if _is_english(text) and _is_successful_result(result):
         add_word(text, result)
+        if _auto_speak:
+            _window.auto_speak(text)
+
+
+def on_auto_speak_toggled(enabled: bool):
+    global _auto_speak
+    _auto_speak = enabled
 
 
 def on_show_input_window():
@@ -372,6 +388,7 @@ if __name__ == "__main__":
     # 初始化系统托盘
     tray = TranslatorTray()
     tray.left_clicked.connect(_flash_card_window.show_signal.emit)
+    tray.auto_speak_toggled.connect(on_auto_speak_toggled)
     tray.show()
 
     # 启动快捷键和鼠标监听（它们是 daemon 线程，随主程序退出而停止）
