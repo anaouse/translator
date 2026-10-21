@@ -11,13 +11,13 @@ from pynput import keyboard, mouse
 from pynput.keyboard import Controller, GlobalHotKeys
 from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
-from PyQt6.QtWidgets import QApplication, QHBoxLayout, QPushButton, QTextEdit, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
 from detect_select_text import create_selection_listener
 from flash_card_window import FlashCardWindow
 from floating_window import FloatingWindow
-from global_variant import g_previous_hwnd, restore_previous_window
-from input_window import InputWindow
+import global_variant
+from global_variant import restore_previous_window
 from translation import youdao_translation
 from tray import TranslatorTray
 from word_store import add_word, flush
@@ -25,7 +25,6 @@ from word_store import add_word, flush
 kb = Controller()
 _window = None
 _floating_window = None
-_input_window = None
 _flash_card_window = None
 
 _last_trigger_time = 0.0
@@ -37,6 +36,10 @@ _auto_speak = True  # 翻译英文后是否自动发音（托盘菜单可切换�
 class PopupWindow(QWidget):
     update_text_signal = pyqtSignal(str, str)  # original_text, translated_text
     check_click_signal = pyqtSignal()
+    show_input_signal = pyqtSignal()
+    show_translation_signal = pyqtSignal(str)
+    check_key_signal = pyqtSignal()
+    submit_signal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -94,9 +97,23 @@ class PopupWindow(QWidget):
             }
         """)
         self.pronounce_btn.clicked.connect(self._pronounce)
-        self.pronounce_btn.hide()  # 默认隐藏，有英文原文时才显示
+        self.pronounce_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         header_layout.addWidget(self.pronounce_btn)
-        header_layout.addStretch()
+        self.input_edit = QLineEdit(self)
+        self.input_edit.setPlaceholderText("输入中文或英文，按 Enter 翻译…")
+        self.input_edit.setStyleSheet("""
+            QLineEdit {
+                color: #1f1f1f;
+                background: white;
+                border: 1px solid rgba(0, 0, 0, 0.12);
+                border-radius: 8px;
+                padding: 6px 8px;
+                font-size: 14px;
+            }
+            QLineEdit:focus { border-color: #0078d7; }
+        """)
+        self.input_edit.returnPressed.connect(self._on_submit)
+        header_layout.addWidget(self.input_edit, 1)
 
         layout.addWidget(header)
 
@@ -116,53 +133,71 @@ class PopupWindow(QWidget):
         """)
         layout.addWidget(self.text_edit)
 
-        # 加入 eventfilter 控制 esc 行为：
+        self.input_edit.installEventFilter(self)
         self.text_edit.installEventFilter(self)
 
-        self.update_text_signal.connect(self._display_and_show)
+        self.update_text_signal.connect(self._display_result)
         self.check_click_signal.connect(self._handle_global_click)
+        self.show_input_signal.connect(self._show_input)
+        self.show_translation_signal.connect(self._show_translation)
+        self.check_key_signal.connect(self._handle_global_key)
 
-    # PopupWindow 类内
+    def _dismiss(self):
+        self.hide()
+        restore_previous_window()
+
     def eventFilter(self, obj, event):
-        if obj == self.text_edit and event.type() == QEvent.Type.KeyPress:
-            if event.key() == Qt.Key.Key_Escape:
-                self.hide()
-                restore_previous_window()
+        if event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Escape or not self.input_edit.hasFocus():
+                self._dismiss()
                 return True
         return super().eventFilter(obj, event)
 
     def keyPressEvent(self, event):
-        # 兜底：无论焦点在弹窗内哪个控件上，ESC 都能隐藏弹窗
-        if event.key() == Qt.Key.Key_Escape:
-            self.hide()
-            restore_previous_window()
+        if event.key() == Qt.Key.Key_Escape or not self.input_edit.hasFocus():
+            self._dismiss()
             return
         super().keyPressEvent(event)
 
-    def _display_and_show(self, original_text, translated_text):
-        global g_previous_hwnd
-        self._original_text = original_text
+    def _handle_global_key(self):
+        if self.isVisible() and not self.input_edit.hasFocus():
+            self._dismiss()
 
+    def _show_window(self):
         current_hwnd = ctypes.windll.user32.GetForegroundWindow()
         if current_hwnd != int(self.winId()):
-            g_previous_hwnd = current_hwnd
-
-        self.text_edit.setPlainText(translated_text)
-
-        # 只有原文是英文时才显示发音按钮
-        if original_text and _is_english(original_text):
-            self.pronounce_btn.show()
-        else:
-            self.pronounce_btn.hide()
-
+            global_variant.g_previous_hwnd = current_hwnd
         if not self.isVisible():
-            # 只在首次显示时定位到鼠标位置
             self._move_near_cursor()
-            self.show()
-            self.raise_()
-            self.activateWindow()
-            # 把键盘焦点给到文本区，否则按键事件到不了 text_edit，ESC 无法生效
-            self.text_edit.setFocus()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def _show_input(self):
+        self._original_text = ""
+        self.input_edit.clear()
+        self.text_edit.clear()
+        self._show_window()
+        self.input_edit.setFocus()
+
+    def _show_translation(self, text):
+        self._original_text = text
+        self.input_edit.setText(text)
+        self.text_edit.setPlainText("请求翻译中...")
+        self._show_window()
+        self.text_edit.setFocus()
+
+    def _on_submit(self):
+        text = self.input_edit.text().strip()
+        if text:
+            self._original_text = text
+            self.text_edit.setPlainText("请求翻译中...")
+            self.submit_signal.emit(text)
+
+    def _display_result(self, original_text, translated_text):
+        # 结果只更新当前查询，不重新打开已隐藏的窗口或抢走输入焦点。
+        if original_text == self._original_text:
+            self.text_edit.setPlainText(translated_text)
 
     def _move_near_cursor(self):
         """把弹窗放到鼠标右下方；超出屏幕时翻转到鼠标左/上方，再夹取到屏幕可用区域内"""
@@ -208,6 +243,14 @@ class PopupWindow(QWidget):
     def _speak(self, text: str):
         try:
             engine = pyttsx3.init()
+            language_tokens = ("english", "en-", "en_", "409", "809") if _is_english(text) else (
+                "chinese", "mandarin", "zh", "804", "0804"
+            )
+            for voice in engine.getProperty("voices"):
+                description = f"{voice.id} {voice.name} {voice.languages}".lower()
+                if any(token in description for token in language_tokens):
+                    engine.setProperty("voice", voice.id)
+                    break
             engine.say(text)
             engine.runAndWait()
         finally:
@@ -215,8 +258,9 @@ class PopupWindow(QWidget):
 
     def auto_speak(self, text: str):
         """翻译完成后自动发音，复用 _pronounce 的发音逻辑"""
-        self._original_text = text
-        self._pronounce()
+        if not self._speaking:
+            self._speaking = True
+            threading.Thread(target=self._speak, args=(text,), daemon=True).start()
 
 
 def get_selected_text() -> str:
@@ -264,27 +308,18 @@ def on_trigger():
     text = get_selected_text()
     print(f"text: {text}")
 
-    if not text or _window is None:
-        if _input_window:
-            _input_window.show_signal.emit()
+    if _window is None:
         return
-    # 先显示"正在翻译..."
-    if _window is not None:
-        _window.update_text_signal.emit(text, "正在翻译...")
-    result = youdao_translation(text)
-    _window.update_text_signal.emit(text, result)
-
-    # Store English word lookups
-    if _is_english(text) and _is_successful_result(result):
-        add_word(text, result)
-        if _auto_speak:
-            _window.auto_speak(text)
+    if not text:
+        _window.show_input_signal.emit()
+        return
+    _window.show_translation_signal.emit(text)
+    on_input_submit(text)
 
 
 def on_input_submit(text: str):
     if not text or _window is None:
         return
-    _window.update_text_signal.emit(text, "正在翻译...")
     result = youdao_translation(text)
     _window.update_text_signal.emit(text, result)
 
@@ -293,6 +328,7 @@ def on_input_submit(text: str):
         add_word(text, result)
         if _auto_speak:
             _window.auto_speak(text)
+
 
 
 def on_auto_speak_toggled(enabled: bool):
@@ -300,9 +336,9 @@ def on_auto_speak_toggled(enabled: bool):
     _auto_speak = enabled
 
 
-def on_show_input_window():
-    if _input_window:
-        _input_window.show_signal.emit()
+def on_show_translation_window():
+    if _window is not None:
+        _window.show_input_signal.emit()
 
 
 def on_mouse_click(x, y, button, pressed):
@@ -314,9 +350,6 @@ def on_mouse_click(x, y, button, pressed):
 
     if _window is not None:
         _window.check_click_signal.emit()
-
-    if _input_window is not None:
-        _input_window.check_click_signal.emit()
 
 
 def on_select_text(action_type):
@@ -330,15 +363,18 @@ def on_select_text(action_type):
 
 
 def on_any_key(key):
-    """按下任意键时隐藏悬浮窗"""
+    """隐藏悬浮图标；翻译窗口未聚焦输入框时也隐藏。"""
     if _floating_window is not None:
         _floating_window.hide_signal.emit()
+
+    if _window is not None:
+        _window.check_key_signal.emit()
 
 
 def start_listeners():
     kb_listener = GlobalHotKeys(
         {
-            "<alt>+q": on_show_input_window,
+            "<alt>+q": on_show_translation_window,
             "<alt>+a": on_trigger,
         }
     )
@@ -374,9 +410,8 @@ if __name__ == "__main__":
         lambda: threading.Thread(target=on_trigger, daemon=True).start()
     )
 
-    # 初始化输入窗
-    _input_window = InputWindow()
-    _input_window.submit_signal.connect(
+    # 输入和结果共用翻译窗口，网络请求在后台线程执行。
+    _window.submit_signal.connect(
         lambda text: threading.Thread(
             target=on_input_submit, args=(text,), daemon=True
         ).start()
