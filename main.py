@@ -13,9 +13,10 @@ from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
-from detect_select_text import create_selection_listener
+from detect_select_text import create_selection_listener, is_ibeam_cursor
 from flash_card_window import FlashCardWindow
 from floating_window import FloatingWindow
+from read_mode_indicator import ReadModeIndicator
 import global_variant
 from global_variant import restore_previous_window
 from translation import youdao_translation
@@ -31,6 +32,14 @@ _last_trigger_time = 0.0
 DEBOUNCE_SECONDS = 0.5
 
 _auto_speak = True  # 翻译英文后是否自动发音（托盘菜单可切换）
+_read_mode = False
+_read_press_pos = None
+_read_press_ibeam = False
+_read_injecting = threading.Event()
+_read_click_lock = threading.Lock()
+_tray = None
+_popup_hwnd = None
+_read_indicator = None
 
 
 class PopupWindow(QWidget):
@@ -336,12 +345,67 @@ def on_auto_speak_toggled(enabled: bool):
     _auto_speak = enabled
 
 
+def on_read_mode_toggled(enabled: bool):
+    global _read_mode
+    _read_mode = enabled
+    if _read_indicator is not None:
+        _read_indicator.set_enabled(enabled)
+    if enabled and _floating_window is not None:
+        _floating_window.hide_signal.emit()
+
+
+def _translate_read_click():
+    # 避免两次快速点击导致模拟点击与复制选区互相干扰。
+    if not _read_click_lock.acquire(blocking=False):
+        return
+    try:
+        if not _read_mode:
+            return
+        time.sleep(0.05)  # 等原始单击的松开事件传到目标程序。
+        if not _read_mode:
+            return
+        _read_injecting.set()
+        try:
+            mouse.Controller().click(mouse.Button.left)
+            time.sleep(0.1)  # 等监听器处理完模拟事件，再恢复真实点击检测。
+        finally:
+            _read_injecting.clear()
+        text = get_selected_text()
+        if text and _read_mode and _window is not None:
+            _window.show_translation_signal.emit(text)
+            on_input_submit(text)
+    finally:
+        _read_click_lock.release()
+
+
 def on_show_translation_window():
     if _window is not None:
         _window.show_input_signal.emit()
 
 
 def on_mouse_click(x, y, button, pressed):
+    global _read_press_pos, _read_press_ibeam
+    if _read_injecting.is_set():
+        return
+
+    if _read_mode and button == mouse.Button.left:
+        if pressed:
+            _read_press_pos = (x, y)
+            rect = (ctypes.c_long * 4)()
+            popup_at_click = (
+                ctypes.windll.user32.IsWindowVisible(_popup_hwnd)
+                and ctypes.windll.user32.GetWindowRect(_popup_hwnd, ctypes.byref(rect))
+                and rect[0] <= x < rect[2] and rect[1] <= y < rect[3]
+            )
+            _read_press_ibeam = is_ibeam_cursor() and not popup_at_click
+        else:
+            if (_read_press_ibeam and _read_press_pos is not None
+                    and abs(x - _read_press_pos[0]) < 10
+                    and abs(y - _read_press_pos[1]) < 10):
+                threading.Thread(target=_translate_read_click, daemon=True).start()
+            _read_press_pos = None
+            _read_press_ibeam = False
+
     if not pressed:
         return
 
@@ -354,6 +418,8 @@ def on_mouse_click(x, y, button, pressed):
 
 def on_select_text(action_type):
     global _floating_window
+    if _read_mode:
+        return
     print(f"[{time.strftime('%H:%M:%S')}] 文本被选中了！触发方式: {action_type}")
 
     # 只要实例存在就发送信号
@@ -376,6 +442,7 @@ def start_listeners():
         {
             "<alt>+q": on_show_translation_window,
             "<alt>+a": on_trigger,
+            "<ctrl>+<alt>+t": lambda: _tray.toggle_read_mode_requested.emit(),
         }
     )
     kb_listener.daemon = True
@@ -403,6 +470,8 @@ if __name__ == "__main__":
 
     # 初始化弹出窗口
     _window = PopupWindow()
+    _popup_hwnd = int(_window.winId())
+    _read_indicator = ReadModeIndicator()
 
     # 初始化小图标
     _floating_window = FloatingWindow()
@@ -421,10 +490,11 @@ if __name__ == "__main__":
     _flash_card_window = FlashCardWindow()
 
     # 初始化系统托盘
-    tray = TranslatorTray()
-    tray.left_clicked.connect(_flash_card_window.show_signal.emit)
-    tray.auto_speak_toggled.connect(on_auto_speak_toggled)
-    tray.show()
+    _tray = TranslatorTray()
+    _tray.left_clicked.connect(_flash_card_window.show_signal.emit)
+    _tray.auto_speak_toggled.connect(on_auto_speak_toggled)
+    _tray.read_mode_toggled.connect(on_read_mode_toggled)
+    _tray.show()
 
     # 启动快捷键和鼠标监听（它们是 daemon 线程，随主程序退出而停止）
     start_listeners()

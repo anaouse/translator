@@ -7,6 +7,8 @@ from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 class TranslatorTray(QSystemTrayIcon):
     left_clicked = pyqtSignal()
     auto_speak_toggled = pyqtSignal(bool)  # True 表示开启自动发音
+    read_mode_toggled = pyqtSignal(bool)
+    toggle_read_mode_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -49,6 +51,13 @@ class TranslatorTray(QSystemTrayIcon):
         self._update_auto_speak_action()
         self.auto_speak_action.triggered.connect(self._toggle_auto_speak)
 
+        # Read mode 开关（快捷键和菜单同步）
+        self.read_mode_enabled = False
+        self.read_mode_action = self.menu.addAction("")
+        self._update_read_mode_action()
+        self.read_mode_action.triggered.connect(self.toggle_read_mode)
+        self.toggle_read_mode_requested.connect(self.toggle_read_mode)
+
         # 添加退出操作
         self.exit_action = self.menu.addAction("退出 (Exit)")
         self.exit_action.triggered.connect(self.exit_app)
@@ -73,6 +82,17 @@ class TranslatorTray(QSystemTrayIcon):
         self.auto_speak_enabled = not self.auto_speak_enabled
         self._update_auto_speak_action()
         self.auto_speak_toggled.emit(self.auto_speak_enabled)
+
+    def _update_read_mode_action(self):
+        self.read_mode_action.setText(
+            "Read mode ☑️ (Ctrl+Alt+T)" if self.read_mode_enabled
+            else "Read mode (Ctrl+Alt+T)"
+        )
+
+    def toggle_read_mode(self):
+        self.read_mode_enabled = not self.read_mode_enabled
+        self._update_read_mode_action()
+        self.read_mode_toggled.emit(self.read_mode_enabled)
 
     def exit_app(self):
         # 正常退出 PyQt 应用
