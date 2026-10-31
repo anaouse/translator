@@ -9,7 +9,7 @@ import pyttsx3
 import pyperclip
 from pynput import keyboard, mouse
 from pynput.keyboard import Controller, GlobalHotKeys
-from PyQt6.QtCore import QEvent, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
@@ -145,6 +145,12 @@ class PopupWindow(QWidget):
         self.input_edit.installEventFilter(self)
         self.text_edit.installEventFilter(self)
 
+        # Read mode 下翻译结果显示 4 秒后自动隐藏
+        self._auto_hide_timer = QTimer(self)
+        self._auto_hide_timer.setSingleShot(True)
+        self._auto_hide_timer.setInterval(4000)
+        self._auto_hide_timer.timeout.connect(self._auto_hide)
+
         self.update_text_signal.connect(self._display_result)
         self.check_click_signal.connect(self._handle_global_click)
         self.show_input_signal.connect(self._show_input)
@@ -152,8 +158,14 @@ class PopupWindow(QWidget):
         self.check_key_signal.connect(self._handle_global_key)
 
     def _dismiss(self):
+        self._auto_hide_timer.stop()
         self.hide()
         restore_previous_window()
+
+    def _auto_hide(self):
+        """Read mode 的翻译结果已展示满 4 秒：用户没有在输入框里操作就隐藏。"""
+        if self.isVisible() and not self.input_edit.hasFocus():
+            self.hide()
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.KeyPress:
@@ -183,6 +195,7 @@ class PopupWindow(QWidget):
         self.activateWindow()
 
     def _show_input(self):
+        self._auto_hide_timer.stop()
         self._original_text = ""
         self.input_edit.clear()
         self.text_edit.clear()
@@ -190,6 +203,7 @@ class PopupWindow(QWidget):
         self.input_edit.setFocus()
 
     def _show_translation(self, text):
+        self._auto_hide_timer.stop()
         self._original_text = text
         self.input_edit.setText(text)
         self.text_edit.setPlainText("请求翻译中...")
@@ -207,6 +221,9 @@ class PopupWindow(QWidget):
         # 结果只更新当前查询，不重新打开已隐藏的窗口或抢走输入焦点。
         if original_text == self._original_text:
             self.text_edit.setPlainText(translated_text)
+            # Read mode 下结果展示 4 秒后自动隐藏
+            if _read_mode:
+                self._auto_hide_timer.start()
 
     def _move_near_cursor(self):
         """把弹窗放到鼠标右下方；超出屏幕时翻转到鼠标左/上方，再夹取到屏幕可用区域内"""
